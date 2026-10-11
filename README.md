@@ -37,7 +37,7 @@ docker compose down        # add -v to wipe postgres
 ```
 
 Monitoring overlay: `docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d`
--> Prometheus http://localhost:9090, Grafana http://localhost:3000 (admin / `$GRAFANA_PASSWORD`).
+-> Prometheus http://localhost:9091, Grafana http://localhost:3000 (admin / `$GRAFANA_PASSWORD`).
 
 ## 2. CI (GitHub Actions)
 

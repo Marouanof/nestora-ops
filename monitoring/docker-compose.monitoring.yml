@@ -8,8 +8,10 @@ services:
     image: prom/prometheus:v2.55.1
     command: ["--config.file=/etc/prometheus/prometheus.yml"]
     volumes:
-      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    ports: ["9090:9090"]
+      # Chemin relatif au projet (1er -f), pas au sous-dossier monitoring/
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # 9091 côté hôte : 9090 est déjà pris par S3Mock
+    ports: ["9091:9090"]
 
   grafana:
     image: grafana/grafana:11.4.0

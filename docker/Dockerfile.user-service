@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
   && useradd -m -u 10001 appuser
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
-RUN chown appuser:appuser /app/app.jar
+RUN mkdir -p /app/uploads && chown -R appuser:appuser /app
 USER appuser
 ENV SPRING_PROFILES_ACTIVE=prod \
     SERVER_PORT=8081

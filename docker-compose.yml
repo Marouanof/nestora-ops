@@ -49,6 +49,7 @@ services:
       MAIL_PASSWORD: ${MAIL_PASSWORD:-dummy}
       EMAIL_SIMULATION: ${EMAIL_SIMULATION:-true}
       SERVER_PORT: 8081
+      FILE_UPLOAD_DIR: /app/uploads
     ports:
       - "8081:8081"
 

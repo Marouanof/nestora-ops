@@ -1,6 +1,7 @@
-# Observabilité locale : se lance par-dessus le compose principal.
+# Observabilité locale : se lance FUSIONNÉ avec le compose principal
+# (même projet, même réseau -> les noms postgres/gateway/user-service résolvent) :
 #   docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
-name: nestora-monitoring
+# Ne PAS lancer ce fichier seul (projet séparé = réseau séparé = DNS cassé).
 
 services:
   prometheus:

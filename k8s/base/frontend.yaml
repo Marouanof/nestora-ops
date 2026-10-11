@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: nestora
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: frontend}
+  template:
+    metadata:
+      labels: {app: frontend}
+    spec:
+      containers:
+        - name: frontend
+          image: ghcr.io/marouanof/nestora-frontend:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 80}]
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: nestora
+spec:
+  selector: {app: frontend}
+  ports:
+    - {port: 80, targetPort: 80}
+---
+# Exposition HTTP simple. En local (kind/minikube) : activer ingress-nginx.
+# Sur la VM OCI : le NodePort suffit + règle de sécurité OCI sur le port 30080.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nestora
+  namespace: nestora
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: frontend, port: {number: 80}}
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: {name: gateway, port: {number: 8080}}

@@ -1,0 +1,33 @@
+# Observabilité locale : se lance par-dessus le compose principal.
+#   docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d
+name: nestora-monitoring
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ../monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+    ports: ["3000:3000"]
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-nestora}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-userdb}?sslmode=disable"
+    depends_on: [postgres]
+
+  blackbox:
+    image: prom/blackbox-exporter:v0.26.0
+    ports: ["9115:9115"]
+
+volumes:
+  grafana-data:

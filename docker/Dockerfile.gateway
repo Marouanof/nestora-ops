@@ -1,0 +1,23 @@
+# syntax=docker/dockerfile:1
+# gateway — Spring Cloud Gateway WebFlux / Java 21
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY .mvn/ .mvn/
+COPY mvnw mvnw.cmd pom.xml ./
+RUN chmod +x mvnw && ./mvnw -B dependency:go-offline -q || true
+COPY src/ src/
+RUN ./mvnw -B clean package -DskipTests -q
+
+FROM eclipse-temurin:21-jre AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+  && rm -rf /var/lib/apt/lists/* \
+  && useradd -m -u 10001 appuser
+WORKDIR /app
+COPY --from=build /app/target/*.jar app.jar
+RUN chown appuser:appuser /app/app.jar
+USER appuser
+ENV SERVER_PORT=8080
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=45s --retries=3 \
+  CMD curl -f http://localhost:8080/actuator/health || exit 1
+ENTRYPOINT ["java","-jar","/app/app.jar"]

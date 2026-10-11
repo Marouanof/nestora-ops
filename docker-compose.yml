@@ -1,0 +1,87 @@
+# Nestora Ops — stack lite (postgres + user-service + gateway + frontend)
+# Hypothèse : clone Nestora en frère du repo ops :
+#   <parent>/Nestora        (https://github.com/Marouanof/Nestora)
+#   <parent>/nestora-ops    (ce repo)
+# Voir scripts/sync-dockerfiles.ps1 (copie nginx.conf + Dockerfiles si besoin).
+name: nestora-lite
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-nestora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-userdb}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-nestora}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  user-service:
+    build:
+      context: ../Nestora/user-service
+      dockerfile: ../../nestora-ops/docker/Dockerfile.user-service
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-user-service:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-userdb}
+      DB_USER: ${POSTGRES_USER:-nestora}
+      DB_PASS: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      JWT_EXPIRATION: ${JWT_EXPIRATION:-86400000}
+      GATEWAY_SHARED_SECRET: ${GATEWAY_SHARED_SECRET:?set GATEWAY_SHARED_SECRET}
+      APP_GATEWAY_URL: http://gateway:8080
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-dummy@example.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-dummy}
+      EMAIL_SIMULATION: ${EMAIL_SIMULATION:-true}
+      SERVER_PORT: 8081
+    ports:
+      - "8081:8081"
+
+  gateway:
+    build:
+      context: ../Nestora/gateway
+      dockerfile: ../../nestora-ops/docker/Dockerfile.gateway
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-gateway:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - user-service
+    environment:
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET}
+      GATEWAY_SHARED_SECRET: ${GATEWAY_SHARED_SECRET:?set GATEWAY_SHARED_SECRET}
+      USER_SERVICE_URI: http://user-service:8081
+      PROPERTY_SERVICE_URI: http://user-service:8081
+      BOOKING_SERVICE_URI: http://user-service:8081
+      PAYMENT_SERVICE_URI: http://user-service:8081
+      NOTIFICATION_SERVICE_URI: http://user-service:8081
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:3000,http://localhost}
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../Nestora/frontend
+      dockerfile: ../../nestora-ops/docker/Dockerfile.frontend
+    image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    depends_on:
+      - gateway
+    ports:
+      - "80:80"
+
+volumes:
+  pgdata:

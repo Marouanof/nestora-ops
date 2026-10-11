@@ -1,0 +1,12 @@
+.env
+k8s/base/secret.yaml
+terraform/oci/terraform.tfvars
+terraform/oci/.terraform/
+terraform/oci/.terraform.lock.hcl
+terraform/oci/terraform.tfstate*
+terraform/oci/crash.log
+**/target/
+**/node_modules/
+**/dist/
+**/nginx.ops.conf
+.DS_Store

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nestora
+resources:
+  - namespace.yaml
+  - postgres.yaml
+  - user-service.yaml
+  - gateway.yaml
+  - frontend.yaml
+# secret.yaml est généré localement depuis secret.example.yaml (gitignoré) :
+#   cp secret.example.yaml secret.yaml && kubectl apply -k .
+# Pour l'activer via Kustomize, décommentez :
+# - secret.yaml

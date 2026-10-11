@@ -1,0 +1,9 @@
+# Copier vers terraform.tfvars (gitignoré) et remplir avec tes OCIDs
+# (console OCI > Identity > Domains > ton user > API keys).
+tenancy_ocid     = "ocid1.tenancy.oc1..xxxx"
+user_ocid        = "ocid1.user.oc1..xxxx"
+fingerprint      = "xx:xx:xx:xx:xx"
+private_key_path = "~/.oci/oci_api_key.pem"
+region           = "eu-frankfurt-1"
+compartment_ocid = "ocid1.compartment.oc1..xxxx"
+ssh_public_key   = "ssh-rsa AAAA... ton user@pc"

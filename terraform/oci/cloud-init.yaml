@@ -1,0 +1,12 @@
+#cloud-config
+package_update: true
+packages:
+  - curl
+  - firewalld
+
+runcmd:
+  - systemctl enable --now firewalld
+  - firewall-cmd --permanent --add-port=22/tcp --add-port=80/tcp --add-port=443/tcp --add-port=6443/tcp --add-port=30080/tcp
+  - firewall-cmd --reload
+  - curl -sfL https://get.k3s.io | INSTALL_K3S_EXEC="--write-kubeconfig-mode 644" sh -
+  - echo "K3S OK $(k3s --version)" > /root/k3s-ready.txt

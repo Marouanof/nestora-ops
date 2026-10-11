@@ -1,0 +1,54 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: nestora
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: user-service}
+  template:
+    metadata:
+      labels: {app: user-service}
+    spec:
+      containers:
+        - name: user-service
+          image: ghcr.io/marouanof/nestora-user-service:latest
+          imagePullPolicy: IfNotPresent
+          ports: [{containerPort: 8081}]
+          env:
+            - {name: SPRING_PROFILES_ACTIVE, value: "prod"}
+            - {name: DB_HOST, value: "postgres"}
+            - {name: DB_PORT, value: "5432"}
+            - {name: DB_NAME, valueFrom: {secretKeyRef: {name: nestora-secrets, key: POSTGRES_DB}}}
+            - {name: DB_USER, valueFrom: {secretKeyRef: {name: nestora-secrets, key: POSTGRES_USER}}}
+            - {name: DB_PASS, valueFrom: {secretKeyRef: {name: nestora-secrets, key: POSTGRES_PASSWORD}}}
+            - {name: JWT_SECRET, valueFrom: {secretKeyRef: {name: nestora-secrets, key: JWT_SECRET}}}
+            - {name: JWT_EXPIRATION, valueFrom: {secretKeyRef: {name: nestora-secrets, key: JWT_EXPIRATION}}}
+            - {name: GATEWAY_SHARED_SECRET, valueFrom: {secretKeyRef: {name: nestora-secrets, key: GATEWAY_SHARED_SECRET}}}
+            - {name: APP_GATEWAY_URL, value: "http://gateway:8080"}
+            - {name: EMAIL_SIMULATION, value: "true"}
+            - {name: MAIL_USERNAME, valueFrom: {secretKeyRef: {name: nestora-secrets, key: MAIL_USERNAME}}}
+            - {name: MAIL_PASSWORD, valueFrom: {secretKeyRef: {name: nestora-secrets, key: MAIL_PASSWORD}}}
+            - {name: SERVER_PORT, value: "8081"}
+          livenessProbe:
+            httpGet: {path: /actuator/health, port: 8081}
+            initialDelaySeconds: 90
+            periodSeconds: 30
+          readinessProbe:
+            httpGet: {path: /actuator/health, port: 8081}
+            initialDelaySeconds: 60
+            periodSeconds: 15
+          resources:
+            requests: {cpu: 250m, memory: 512Mi}
+            limits: {cpu: 1000m, memory: 1Gi}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-service
+  namespace: nestora
+spec:
+  selector: {app: user-service}
+  ports:
+    - {port: 8081, targetPort: 8081}

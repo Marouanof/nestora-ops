@@ -74,6 +74,9 @@ jobs:
 
       - name: Test gateway
         working-directory: Nestora/gateway
+        env:
+          JWT_SECRET: ci-dummy-secret-min-32-chars-0123456789abcdef
+          GATEWAY_SHARED_SECRET: ci-dummy-gateway-secret
         run: chmod +x mvnw && ./mvnw -B test
 
       - name: Set up Node

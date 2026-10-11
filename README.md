@@ -86,6 +86,7 @@ Defaults (2 OCPU / 12 GB) fit the Ampere Always Free quota (4 OCPU / 24 GB). `te
 - CI: test first, immutable `:<sha>` tag + `:latest`, Trivy scan before push.
 - K8s: one shared Secret, `/actuator/health` probes, requests/limits sized for a small VM, 5 GB PVC.
 - Terraform: deny-by-default network, only 22/80/443/30080 open, idempotent cloud-init, local state (Object Storage backend as next step).
+- Spring profiles: never point `spring.profiles.default` at a gitignored local file — worktree builds would silently use hardcoded secrets while CI builds use env vars (caught live: ghost `application-local.yml` broke JWT in K8s only). Local profile is opt-in (`SPRING_PROFILES_ACTIVE=local`); always check the `falling back to ... profile` line at startup.
 
 ## 6. Skills demonstrated
 

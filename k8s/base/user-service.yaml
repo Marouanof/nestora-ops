@@ -28,17 +28,24 @@ spec:
             - {name: GATEWAY_SHARED_SECRET, valueFrom: {secretKeyRef: {name: nestora-secrets, key: GATEWAY_SHARED_SECRET}}}
             - {name: APP_GATEWAY_URL, value: "http://gateway:8080"}
             - {name: EMAIL_SIMULATION, value: "true"}
+            # Cluster de dev : SMTP factice -> sonde mail désactivée
+            # (prod = vrai SMTP + sonde active, sinon /actuator/health = 503)
+            - {name: MANAGEMENT_HEALTH_MAIL_ENABLED, value: "false"}
             - {name: MAIL_USERNAME, valueFrom: {secretKeyRef: {name: nestora-secrets, key: MAIL_USERNAME}}}
             - {name: MAIL_PASSWORD, valueFrom: {secretKeyRef: {name: nestora-secrets, key: MAIL_PASSWORD}}}
             - {name: SERVER_PORT, value: "8081"}
           livenessProbe:
             httpGet: {path: /actuator/health, port: 8081}
-            initialDelaySeconds: 90
+            initialDelaySeconds: 120
             periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
           readinessProbe:
             httpGet: {path: /actuator/health, port: 8081}
-            initialDelaySeconds: 60
+            initialDelaySeconds: 90
             periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 5
           resources:
             requests: {cpu: 250m, memory: 512Mi}
             limits: {cpu: 1000m, memory: 1Gi}

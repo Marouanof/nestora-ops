@@ -1,8 +1,8 @@
-# Nestora Ops — stack lite (postgres + user-service + gateway + frontend)
-# Hypothèse : clone Nestora en frère du repo ops :
-#   <parent>/Nestora        (https://github.com/Marouanof/Nestora)
-#   <parent>/nestora-ops    (ce repo)
-# Voir scripts/sync-dockerfiles.ps1 (copie nginx.conf + Dockerfiles si besoin).
+# Nestora Ops — stack lite (postgres + user-service + gateway + frontend + minio)
+# Code source Nestora : C:/LF/dmareeb (= Marouanof/Nestora @ 902da54).
+# Les contexts ci-dessous sont absolus (PC de dev). En CI, les images se
+# construisent via docker/build-push-action (voir .github/workflows/ci.yml).
+# Voir scripts/sync-dockerfiles.ps1 (copie nginx.conf vers le frontend).
 name: nestora-lite
 
 services:
@@ -25,8 +25,8 @@ services:
 
   user-service:
     build:
-      context: ../Nestora/user-service
-      dockerfile: ../../nestora-ops/docker/Dockerfile.user-service
+      context: C:/LF/dmareeb/user-service
+      dockerfile: C:/nestora-ops/docker/Dockerfile.user-service
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-user-service:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
@@ -50,13 +50,20 @@ services:
       EMAIL_SIMULATION: ${EMAIL_SIMULATION:-true}
       SERVER_PORT: 8081
       FILE_UPLOAD_DIR: /app/uploads
+      # --- Stockage S3 (décommenter pour S3Mock local ; voir §8 du README) ---
+      # STORAGE_TYPE: s3
+      # AWS_S3_REGION: ${AWS_S3_REGION:-us-east-1}
+      # AWS_S3_BUCKET_NAME: ${S3_BUCKET:-nestora-uploads}
+      # AWS_S3_ENDPOINT: http://s3mock:9090
+      # AWS_ACCESS_KEY: test
+      # AWS_SECRET_KEY: test
     ports:
       - "8081:8081"
 
   gateway:
     build:
-      context: ../Nestora/gateway
-      dockerfile: ../../nestora-ops/docker/Dockerfile.gateway
+      context: C:/LF/dmareeb/gateway
+      dockerfile: C:/nestora-ops/docker/Dockerfile.gateway
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-gateway:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
@@ -75,8 +82,8 @@ services:
 
   frontend:
     build:
-      context: ../Nestora/frontend
-      dockerfile: ../../nestora-ops/docker/Dockerfile.frontend
+      context: C:/LF/dmareeb/frontend
+      dockerfile: C:/nestora-ops/docker/Dockerfile.frontend
     image: ${REGISTRY:-ghcr.io}/${IMAGE_OWNER:-marouanof}/nestora-frontend:${IMAGE_TAG:-latest}
     restart: unless-stopped
     depends_on:
@@ -84,5 +91,26 @@ services:
     ports:
       - "80:80"
 
+  # Faux S3 local (S3Mock d'Adobe) : même API qu'AWS, zéro carte, zéro compte.
+  # Buckets créés au démarrage via INITIAL_BUCKETS. Port 9090 = HTTP.
+  # Vérif : curl http://localhost:9090/nom-bucket/ (PUT crée, GET liste).
+  s3mock:
+    image: adobe/s3mock:latest
+    restart: unless-stopped
+    environment:
+      COM_ADOBE_TESTING_S3MOCK_STORE_INITIAL_BUCKETS: ${S3_BUCKET:-nestora-uploads}
+      COM_ADOBE_TESTING_S3MOCK_STORE_ROOT: /s3mockroot
+      COM_ADOBE_TESTING_S3MOCK_STORE_RETAIN_FILES_ON_EXIT: "true"
+    ports:
+      - "9090:9090"
+    volumes:
+      - s3mock-data:/s3mockroot
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/favicon.ico"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
+  s3mock-data:

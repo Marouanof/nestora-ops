@@ -96,3 +96,20 @@ Coût : 2 OCPU / 12 Go (défauts) dans le quota Always Free Ampere (4 OCPU / 24 
 2. Conteneuriser property/booking/notification + RabbitMQ, vraies URIs gateway.
 3. CD GitOps ArgoCD + 2 env (staging/prod) via Kustomize overlays.
 4. Backend Terraform remote state (OCI Object Storage) + Vault/External Secrets.
+
+## 8. Stockage fichiers : local / S3Mock / AWS (sans carte)
+
+`user-service` choisit son stockage via `STORAGE_TYPE` (`storage.type`) :
+
+| Mode | Quand | Config |
+|---|---|---|
+| `local` (défaut) | dev, tests, CI | `FILE_UPLOAD_DIR=/app/uploads` (dossier créé dans l'image, user non-root) |
+| `s3` + S3Mock | dev/test S3 sans carte | bloc S3 décommenté dans `docker-compose.yml` : endpoint `http://s3mock:9090`, bucket créé auto au démarrage (`INITIAL_BUCKETS`), vérif par `curl http://localhost:9090/<bucket>/` |
+| `s3` + AWS | prod (le jour de la carte) | mêmes variables, endpoint vide (= vrai AWS) + vraies clés + bucket AWS créé |
+
+Détails à connaître :
+- S3Mock (Adobe, image `adobe/s3mock`, 81 Mo) n'accepte que le **path style** (`host/bucket/clé`) : d'où le `forcePathStyle(true)` dans `S3Config` quand un endpoint est configuré — sans ça, rien ne marche.
+- `S3Config` (Nestora) : `aws.s3.endpoint` vide = AWS réel ; renseigné = endpoint S3-compatible.
+- `S3FileStorageService` : l'URL retournée suit l'endpoint (`http://s3mock:9090/bucket/clé` en local, format `bucket.s3.region.amazonaws.com` sur AWS).
+- Bucket privé par défaut : adapté aux KYC ; à assouplir explicitement si les avatars doivent être publics.
+- Phrase d'entretien : « stockage S3-compatible, testé en local sur S3Mock, bascule AWS sans changement de code ».

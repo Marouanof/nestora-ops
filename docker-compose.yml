@@ -48,6 +48,8 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME:-dummy@example.com}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-dummy}
       EMAIL_SIMULATION: ${EMAIL_SIMULATION:-true}
+      # Dev local uniquement : SMTP factice -> sonde mail désactivée (prod = vrai SMTP + sonde active)
+      MANAGEMENT_HEALTH_MAIL_ENABLED: "false"
       SERVER_PORT: 8081
       FILE_UPLOAD_DIR: /app/uploads
       # --- Stockage S3 (décommenter pour S3Mock local ; voir §8 du README) ---

@@ -18,6 +18,22 @@ env:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    # Postgres éphémère pour le contextLoads du user-service (profil prod) :
+    # même câblage qu'en prod, données jetables, 0 secret réel.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: nestora
+          POSTGRES_PASSWORD: ci-dummy-password
+          POSTGRES_DB: userdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nestora"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout ops repo
         uses: actions/checkout@v4
@@ -39,6 +55,21 @@ jobs:
 
       - name: Test user-service
         working-directory: Nestora/user-service
+        env:
+          SPRING_PROFILES_ACTIVE: prod
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_NAME: userdb
+          DB_USER: nestora
+          DB_PASS: ci-dummy-password
+          JWT_SECRET: ci-dummy-secret-min-32-chars-0123456789abcdef
+          JWT_EXPIRATION: 86400000
+          GATEWAY_SHARED_SECRET: ci-dummy-gateway-secret
+          APP_GATEWAY_URL: http://localhost:8080
+          MAIL_USERNAME: dummy@example.com
+          MAIL_PASSWORD: dummy
+          EMAIL_SIMULATION: "true"
+          SERVER_PORT: 8081
         run: chmod +x mvnw && ./mvnw -B test
 
       - name: Test gateway

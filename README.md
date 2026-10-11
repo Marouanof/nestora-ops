@@ -1,115 +1,115 @@
-# nestora-ops — mise en prod de Nestora (lite)
+# nestora-ops — production deployment of Nestora (lite)
 
-Industrialisation DevOps de [Nestora](https://github.com/Marouanof/Nestora) en version **lite** :
-`postgres + user-service + gateway + frontend`. Les autres microservices (property/booking/payment/notification)
-gardent `USER_SERVICE_URI`-style et pointent vers `user-service` en attendant leur conteneurisation (roadmap).
+DevOps delivery layer for [Nestora](https://github.com/Marouanof/Nestora), scoped to the **lite** slice:
+`postgres + user-service + gateway + frontend`. Remaining microservices (property/booking/payment/notification)
+keep `*_SERVICE_URI`-style routing toward `user-service` until containerized (see Roadmap).
 
 ```
-Navigateur -> frontend (Nginx :80, /api -> gateway) -> gateway :8080 -> user-service :8081 -> postgres :5432
-CI : GitHub Actions (test -> build -> Trivy -> push GHCR)
-Infra : Terraform OCI Always Free (VCN + VM Ampere + k3s via cloud-init)
-K8s : manifests plain + Kustomize (namespace nestora) | Obs : Prometheus + Grafana + postgres-exporter + blackbox
+Browser -> frontend (Nginx :80, /api -> gateway) -> gateway :8080 -> user-service :8081 -> postgres :5432
+CI: GitHub Actions (test -> build -> Trivy scan -> push to GHCR)
+Infra: Terraform on OCI Always Free (VCN + Ampere VM + k3s via cloud-init)
+K8s: plain manifests + Kustomize (namespace nestora) | Obs: Prometheus + Grafana + postgres-exporter + blackbox
+Object storage: local volume (dev) / S3Mock (S3 API testing) / AWS S3 (prod) — see §7
 ```
 
-## 1. Démarrage local (Windows, ~15 min)
+[![CI](https://github.com/Marouanof/nestora-ops/actions/workflows/ci.yml/badge.svg)](https://github.com/Marouanof/nestora-ops/actions/workflows/ci.yml)
+
+## 1. Local run (~15 min)
 
 ```powershell
-# 0. Préreq : Docker Desktop démarré, WSL2 OK
-# 1. Cloner Nestora en frère de ce repo + sync nginx
+# 0. Prereqs: Docker Desktop running
+# 1. Sync nginx config into the Nestora frontend checkout
 .\scripts\sync-dockerfiles.ps1
-# 2. Secrets locaux
+# 2. Local secrets
 copy .env.example .env
-#    -> remplis POSTGRES_PASSWORD, JWT_SECRET (>=32 chars), GATEWAY_SHARED_SECRET
-#    (génère avec : openssl rand -base64 48)
+#    -> fill POSTGRES_PASSWORD, JWT_SECRET (>= 32 chars), GATEWAY_SHARED_SECRET
+#    (generate with: openssl rand -base64 48)
 # 3. Build + run
 docker compose --env-file .env up --build -d
 docker compose ps
 curl http://localhost:8080/actuator/health   # gateway
 curl http://localhost:8081/actuator/health   # user-service
-# front : http://localhost/
+# front: http://localhost/
 # 4. Logs
 docker compose logs -f gateway user-service
 # 5. Stop
-docker compose down        # + -v pour purger postgres
+docker compose down        # add -v to wipe postgres
 ```
 
-Option monitoring : `docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d`
--> Prometheus http://localhost:9090, Grafana http://localhost:3000 (admin / $GRAFANA_PASSWORD).
+Monitoring overlay: `docker compose -f docker-compose.yml -f monitoring/docker-compose.monitoring.yml up -d`
+-> Prometheus http://localhost:9090, Grafana http://localhost:3000 (admin / `$GRAFANA_PASSWORD`).
 
 ## 2. CI (GitHub Actions)
 
-Workflow `.github/workflows/ci.yml` : checkout double (ops + Nestora), tests Maven (`user-service`, `gateway`),
-lint+build Vite, build/push GHCR (`nestora-user-service`, `nestora-gateway`, `nestora-frontend` + tag `:latest` + `:<sha>`),
-scan Trivy HIGH/CRITICAL (SARIF, non bloquant au début).
+Workflow `.github/workflows/ci.yml`: dual checkout (ops + Nestora), Maven tests (`user-service`, `gateway`),
+Vite lint + build, Docker build/push to GHCR (`nestora-user-service`, `nestora-gateway`, `nestora-frontend`,
+tags `:latest` + `:<sha>`), Trivy HIGH/CRITICAL scan (SARIF, non-blocking).
 
-Secrets requis côté repo GitHub : aucun pour GHCR public (`GITHUB_TOKEN` suffit).
-Pour Docker Hub : ajouter `DOCKER_USERNAME` / `DOCKER_PASSWORD` et adapter (modèle existant dans `Nestora/gateway/.github/workflows/ci-gateway.yml`).
+No extra secrets required for GHCR on public repos (`GITHUB_TOKEN` is enough).
 
 ## 3. Kubernetes
 
 ```bash
-cp k8s/base/secret.example.yaml k8s/base/secret.yaml  # remplir, fichier gitignoré
+cp k8s/base/secret.example.yaml k8s/base/secret.yaml  # fill in, file is gitignored
 kubectl apply -f k8s/base/namespace.yaml
 kubectl apply -f k8s/base/secret.yaml
-kubectl apply -k k8s/base   # ou: kubectl apply -f k8s/base/*.yaml
+kubectl apply -k k8s/base   # or: kubectl apply -f k8s/base/*.yaml
 kubectl -n nestora get pods,svc
-kubectl -n nestora port-forward svc/frontend 8088:80   # front local sans ingress
+kubectl -n nestora port-forward svc/frontend 8088:80   # local front without ingress
 ```
 
-Images par défaut : `ghcr.io/marouanof/nestora-*`. Remplace `marouanof` par ton owner GHCR si fork.
-Ingress fourni pour cluster avec ingress-nginx ; sur la VM OCI, le NodePort 30080 est ouvert dans la security list.
+Default images: `ghcr.io/marouanof/nestora-*`. Replace `marouanof` with your GHCR owner on fork.
+Ingress included for clusters with ingress-nginx; on the OCI VM, NodePort 30080 is opened in the security list.
 
-## 4. Infra OCI Always Free (Terraform)
+## 4. OCI infrastructure (Terraform, Always Free)
 
 ```bash
 cd terraform/oci
-cp terraform.tfvars.example terraform.tfvars   # remplir OCIDs + clé API + clé SSH
+cp terraform.tfvars.example terraform.tfvars   # fill in OCIDs + API key + SSH key
 terraform init && terraform fmt -check && terraform validate
 terraform plan -out plan.out
 terraform apply plan.out
-# -> output : k3s_public_ip, ssh_cmd, kubeconfig_cmd
+# -> outputs: k3s_public_ip, ssh_cmd, kubeconfig_cmd
 ssh opc@<ip> "cat /root/k3s-ready.txt"
 scp opc@<ip>:/etc/rancher/k3s/k3s.yaml ~/.kube/nestora-oci.yaml
-# édite server: https://<ip>:6443, puis :
+# set server: https://<ip>:6443, then:
 kubectl --kubeconfig ~/.kube/nestora-oci.yaml -n nestora get nodes
 ```
 
-Coût : 2 OCPU / 12 Go (défauts) dans le quota Always Free Ampere (4 OCPU / 24 Go). `terraform destroy` pour libérer.
+Defaults (2 OCPU / 12 GB) fit the Ampere Always Free quota (4 OCPU / 24 GB). `terraform destroy` releases everything.
 
-## 5. Ce que ça prouve en entretien (à savoir expliquer)
+## 5. Architecture decisions
 
-- Layer Docker multi-stage : image runtime sans JDK/Maven/Node (~-70 % de taille), user non-root, HEALTHCHECK.
-- `SPRING_PROFILES_ACTIVE=prod` : la conf vient des env vars (`application-prod.properties` / `application.yml`), jamais en dur.
-- Gateway : routage + JWT + CORS centralisés ; le front appelle du relatif `/api` proxifié par Nginx (pas de CORS en prod).
-- CI : test d'abord, tag immutable `:<sha>` + `:latest`, scan Trivy avant push.
-- K8s : 1 Secret partagé, probes `/actuator/health`, requests/limits calibrés petite VM, PVC 5 Go.
-- Terraform : réseau fermé par défaut, seuls 22/80/443/30080 ouverts, cloud-init idempotent, state local (backend OCI Object Storage en bonus).
+- Multi-stage Docker builds: runtime images ship no JDK/Maven/Node (~-70% size), non-root user, HEALTHCHECK.
+- `SPRING_PROFILES_ACTIVE=prod`: all config comes from env vars (`application-prod.properties` / `application.yml`), nothing hardcoded.
+- Gateway: centralized routing + JWT + CORS; frontend calls relative `/api`, proxied by Nginx (no CORS in prod).
+- CI: test first, immutable `:<sha>` tag + `:latest`, Trivy scan before push.
+- K8s: one shared Secret, `/actuator/health` probes, requests/limits sized for a small VM, 5 GB PVC.
+- Terraform: deny-by-default network, only 22/80/443/30080 open, idempotent cloud-init, local state (Object Storage backend as next step).
 
-## 6. Pour le CV / LinkedIn
+## 6. Skills demonstrated
 
-- `Projet DevOps — Nestora Ops : conteneurisation multi-stage (Spring Boot 21, Vite/Nginx, Postgres 16), CI/CD GitHub Actions + GHCR + Trivy, IaC Terraform (OCI Always Free), déploiement Kubernetes (Kustomize, probes, secrets), observabilité Prometheus/Grafana.`
-- Compétences : `Docker · GitHub Actions · Kubernetes · Terraform · OCI · Prometheus/Grafana · GHCR · Trivy`.
+Docker · GitHub Actions · Kubernetes · Terraform · OCI · Prometheus/Grafana · GHCR · Trivy · S3-compatible storage
 
-## 7. Roadmap honnête (ne pas claimer avant de l'avoir fait)
+## 7. Object storage: local / S3Mock / AWS
 
-1. `micrometer-registry-prometheus` dans les poms -> scrape `/actuator/prometheus` au lieu du blackbox seul.
-2. Conteneuriser property/booking/notification + RabbitMQ, vraies URIs gateway.
-3. CD GitOps ArgoCD + 2 env (staging/prod) via Kustomize overlays.
-4. Backend Terraform remote state (OCI Object Storage) + Vault/External Secrets.
+`user-service` selects storage via `STORAGE_TYPE` (`storage.type`):
 
-## 8. Stockage fichiers : local / S3Mock / AWS (sans carte)
-
-`user-service` choisit son stockage via `STORAGE_TYPE` (`storage.type`) :
-
-| Mode | Quand | Config |
+| Mode | Use | Config |
 |---|---|---|
-| `local` (défaut) | dev, tests, CI | `FILE_UPLOAD_DIR=/app/uploads` (dossier créé dans l'image, user non-root) |
-| `s3` + S3Mock | dev/test S3 sans carte | bloc S3 décommenté dans `docker-compose.yml` : endpoint `http://s3mock:9090`, bucket créé auto au démarrage (`INITIAL_BUCKETS`), vérif par `curl http://localhost:9090/<bucket>/` |
-| `s3` + AWS | prod (le jour de la carte) | mêmes variables, endpoint vide (= vrai AWS) + vraies clés + bucket AWS créé |
+| `local` (default) | dev, tests, CI | `FILE_UPLOAD_DIR=/app/uploads` (created in the image, non-root owned) |
+| `s3` + S3Mock | S3 API testing, no AWS account | uncomment the S3 block in `docker-compose.yml`: endpoint `http://s3mock:9090`, bucket auto-created at startup (`INITIAL_BUCKETS`), verify with `curl http://localhost:9090/<bucket>/` |
+| `s3` + AWS | prod | same variables, empty endpoint (= real AWS) + real keys + existing AWS bucket |
 
-Détails à connaître :
-- S3Mock (Adobe, image `adobe/s3mock`, 81 Mo) n'accepte que le **path style** (`host/bucket/clé`) : d'où le `forcePathStyle(true)` dans `S3Config` quand un endpoint est configuré — sans ça, rien ne marche.
-- `S3Config` (Nestora) : `aws.s3.endpoint` vide = AWS réel ; renseigné = endpoint S3-compatible.
-- `S3FileStorageService` : l'URL retournée suit l'endpoint (`http://s3mock:9090/bucket/clé` en local, format `bucket.s3.region.amazonaws.com` sur AWS).
-- Bucket privé par défaut : adapté aux KYC ; à assouplir explicitement si les avatars doivent être publics.
-- Phrase d'entretien : « stockage S3-compatible, testé en local sur S3Mock, bascule AWS sans changement de code ».
+Notes:
+- S3Mock (Adobe, `adobe/s3mock`, 81 MB) is **path-style only** (`host/bucket/key`): hence `forcePathStyle(true)` in `S3Config` whenever an endpoint is set — required, not optional.
+- `S3Config`: empty `aws.s3.endpoint` = real AWS; set = S3-compatible endpoint.
+- `S3FileStorageService`: returned URLs follow the endpoint (`http://s3mock:9090/bucket/key` locally, `bucket.s3.region.amazonaws.com` format on AWS).
+- Buckets private by default (fits KYC documents); relax explicitly if avatars must be public.
+
+## 8. Roadmap
+
+1. `micrometer-registry-prometheus` in the poms -> scrape `/actuator/prometheus` instead of blackbox-only.
+2. Containerize property/booking/notification + RabbitMQ, real gateway URIs.
+3. GitOps CD with ArgoCD + 2 envs (staging/prod) via Kustomize overlays.
+4. Terraform remote state (OCI Object Storage) + Vault/External Secrets.
